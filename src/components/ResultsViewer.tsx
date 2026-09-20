@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Copy, Check, Info, FileText, Film, Layers, CheckCircle2 } from 'lucide-react';
+import { Download, Copy, Check, Info, FileText, Film, Layers, CheckCircle2, Cpu, Cloud } from 'lucide-react';
 import { AudioAnalysisResult } from '../types';
 import {
   countKazakhLetters,
@@ -43,10 +43,23 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ result, filename }
     <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
         <div>
-          <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-            2. Résultats de l'analyse & Traduction
-          </h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              2. Résultats de l'analyse & Traduction
+            </h2>
+            {result.engine === 'local-whisper' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-[11px] font-semibold">
+                <Cpu className="w-3 h-3 text-emerald-600" />
+                Modèle Local Whisper ONNX (0 API Gemini)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-sky-50 border border-sky-200 text-sky-800 rounded-md text-[11px] font-semibold">
+                <Cloud className="w-3 h-3 text-sky-600" />
+                Google Gemini Cloud
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
             Généré avec contrainte stricte de cyrillique kazakh et traduction fluide en anglais
           </p>

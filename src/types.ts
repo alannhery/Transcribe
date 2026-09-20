@@ -1,3 +1,5 @@
+export type EngineMode = 'local-whisper' | 'gemini-cloud';
+
 export interface SubtitleSegment {
   start_time: string;
   end_time: string;
@@ -10,6 +12,7 @@ export interface AudioAnalysisResult {
   translation: string;
   notes: string;
   segments?: SubtitleSegment[];
+  engine?: EngineMode;
 }
 
 export interface SampleAudio {

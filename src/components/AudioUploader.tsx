@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Mic, Square, FileAudio, Play, Pause, Sparkles, Volume2, Music } from 'lucide-react';
+import { Upload, Mic, Square, FileAudio, Play, Pause, Sparkles, Volume2, Music, Cpu, Cloud, ShieldCheck } from 'lucide-react';
 import { SAMPLE_AUDIO_ITEMS } from '../data/samples';
-import { SampleAudio } from '../types';
+import { SampleAudio, EngineMode } from '../types';
 
 interface AudioUploaderProps {
   onAudioSelected: (file: File | null, audioUrl: string | null, sample?: SampleAudio) => void;
@@ -11,6 +11,8 @@ interface AudioUploaderProps {
   onStartAnalysis: () => void;
   selectedModel: string;
   onModelChange: (model: string) => void;
+  engineMode: EngineMode;
+  onEngineModeChange: (mode: EngineMode) => void;
 }
 
 export const AudioUploader: React.FC<AudioUploaderProps> = ({
@@ -21,6 +23,8 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
   onStartAnalysis,
   selectedModel,
   onModelChange,
+  engineMode,
+  onEngineModeChange,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -119,13 +123,41 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
           </p>
         </div>
 
-        {/* Modèle Gemini utilisé */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-slate-500">Moteur IA :</span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 border border-sky-200 text-sky-800 rounded-lg text-xs font-semibold shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
-            Gemini 2.5 Flash (Audio & Cyrillique)
-          </span>
+        {/* Sélecteur de Moteur (Local ONNX vs Gemini Cloud) */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">Moteur d'inférence :</span>
+          <div className="inline-flex p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs">
+            <button
+              id="engine-local-btn"
+              type="button"
+              onClick={() => onEngineModeChange('local-whisper')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${
+                engineMode === 'local-whisper'
+                  ? 'bg-white text-emerald-800 shadow-2xs font-semibold border border-emerald-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Modèle Local (Whisper ONNX)</span>
+              <span className="text-[10px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-semibold">
+                Sans API
+              </span>
+            </button>
+
+            <button
+              id="engine-cloud-btn"
+              type="button"
+              onClick={() => onEngineModeChange('gemini-cloud')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${
+                engineMode === 'gemini-cloud'
+                  ? 'bg-white text-sky-800 shadow-2xs font-semibold border border-sky-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Cloud className="w-3.5 h-3.5 text-sky-600" />
+              <span>Google Gemini (Cloud)</span>
+            </button>
+          </div>
         </div>
       </div>
 

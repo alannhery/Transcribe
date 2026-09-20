@@ -3,9 +3,9 @@ import { Navbar } from './components/Navbar';
 import { AudioUploader } from './components/AudioUploader';
 import { ResultsViewer } from './components/ResultsViewer';
 import { PythonModal } from './components/PythonModal';
-import { AudioAnalysisResult, SampleAudio } from './types';
+import { AudioAnalysisResult, SampleAudio, EngineMode } from './types';
 import { SAMPLE_AUDIO_ITEMS } from './data/samples';
-import { AlertCircle, FileCode, Terminal, Sparkles, BookOpen, Check, RefreshCw } from 'lucide-react';
+import { AlertCircle, FileCode, Terminal, Sparkles, BookOpen, Check, RefreshCw, Cpu, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -14,9 +14,11 @@ export default function App() {
   const [activeSample, setActiveSample] = useState<SampleAudio | null>(null);
 
   const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
+  const [engineMode, setEngineMode] = useState<EngineMode>('local-whisper');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<AudioAnalysisResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [resilienceNotice, setResilienceNotice] = useState<string | null>(null);
 
   const [isPythonModalOpen, setIsPythonModalOpen] = useState<boolean>(false);
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
@@ -77,37 +79,53 @@ export default function App() {
         reader.readAsDataURL(selectedFile);
         const audioBase64 = await base64Promise;
 
-        const response = await fetch('/api/transcribe', {
+        const endpoint = engineMode === 'local-whisper' ? '/api/local-transcribe' : '/api/transcribe';
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             audioBase64,
             mimeType: selectedFile.type || 'audio/mp3',
             model: selectedModel,
+            engine: engineMode,
           }),
         });
 
         const data = await response.json();
 
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Erreur lors de la transcription audio.');
+        if (!data.success) {
+          setErrorMessage(data.error || 'Erreur lors de la transcription audio.');
+          return;
         }
 
-        setAnalysisResult(data.data);
+        const enrichedResult: AudioAnalysisResult = {
+          ...data.data,
+          engine: data.engine || engineMode,
+        };
+
+        setAnalysisResult(enrichedResult);
+        setErrorMessage(null);
+        if (data.isResilienceMode && data.resilienceNotice) {
+          setResilienceNotice(data.resilienceNotice);
+        } else {
+          setResilienceNotice(null);
+        }
       } else if (activeSample) {
         // Simulation avec le sample
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => setTimeout(resolve, 600));
         setAnalysisResult({
           transcription: activeSample.kazakhSampleText,
           translation: activeSample.englishTranslation,
           notes: activeSample.notes,
           segments: activeSample.segments,
+          engine: engineMode,
         });
+        setErrorMessage(null);
+        setResilienceNotice(null);
       }
     } catch (err: any) {
-      console.error('Analyse error:', err);
       setErrorMessage(
-        err.message || 'Une erreur est survenue lors de l\'analyse audio avec Google Gemini.'
+        err.message || 'Une erreur est survenue lors de l\'analyse audio.'
       );
     } finally {
       setIsAnalyzing(false);
@@ -209,7 +227,36 @@ export default function App() {
           onStartAnalysis={handleStartAnalysis}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
+          engineMode={engineMode}
+          onEngineModeChange={setEngineMode}
         />
+
+        {/* Bannière d'information de résilience si le quota API gratuit est saturé */}
+        {resilienceNotice && (
+          <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl text-sky-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-500 animate-pulse shrink-0" />
+              <p className="font-medium leading-relaxed">{resilienceNotice}</p>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <button
+                onClick={() => handleStartAnalysis()}
+                disabled={isAnalyzing}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-md text-xs font-semibold transition-colors"
+                title="Tenter une nouvelle requête vers Google Gemini"
+              >
+                <RefreshCw className={`w-3 h-3 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                <span>Réanalyser via Gemini</span>
+              </button>
+              <button
+                onClick={() => setResilienceNotice(null)}
+                className="text-sky-700 hover:text-sky-950 px-1.5 py-1 rounded text-xs font-medium"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Résultats côte à côte */}
         {analysisResult && (
