@@ -86,83 +86,109 @@ async function startServer() {
       // Nettoyage éventuel du préfixe data:audio/...;base64,
       const cleanBase64 = audioBase64.replace(/^data:audio\/[a-zA-Z0-9.-]+;base64,/, "");
 
-      const systemInstruction = `You are a native Kazakh linguist and professional speech-to-text expert and translator.
+      const instructionsAndPrompt = `You are a native Kazakh senior linguist, professional speech-to-text expert, and certified Kazakh-to-English translator.
+
 CRITICAL LINGUISTIC RULES FOR KAZAKH:
 1. Transcription MUST strictly be in official Kazakh Cyrillic script (Қазақ кириллицасы).
 2. Faithfully represent the 9 specific Kazakh letters: Әә, Ғғ, Ққ, Ңң, Өө, Ұұ, Үү, Һһ, Іі.
-3. Never replace Kazakh letters with standard Russian counterparts (e.g. do not replace 'қ' with 'к', 'ғ' with 'г', 'ұ'/'ү' with 'у', 'і' with 'и').
-4. Follow Kazakh vowel harmony.
+3. Never replace Kazakh letters with generic Russian counterparts (e.g. do NOT replace 'қ' with 'к', 'ғ' with 'г', 'ұ'/'ү' with 'у', 'і' with 'и').
+4. Follow Kazakh vowel harmony (жуан және жіңішке дауыстылар).
 5. Translate faithfully into fluent, idiomatic, natural English.
-6. In 'notes', record linguistic remarks: Russian code-switching/loanwords, dialectal features, audio quality.
-7. Break down the speech into timed segments for subtitles (.SRT formatted timestamps 'HH:MM:SS,mmm').`;
+6. In 'notes', record linguistic observations: Russian code-switching/loanwords, dialectal features, audio quality.
+7. Break down the speech into timed segments for subtitles (.SRT formatted timestamps 'HH:MM:SS,mmm').
 
-      const prompt = `Transcribe this Kazakh speech audio accurately in Kazakh Cyrillic script and translate it into English. Produce clean timed segments for subtitles.`;
+TASK:
+Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly in original Kazakh Cyrillic script and translate it faithfully into English. Provide phonetic/linguistic notes and timestamped subtitle segments.`;
 
-      const chosenModel = model || "gemini-2.5-flash";
+      const primaryModel = model || "gemini-2.5-flash";
 
-      const response = await ai.models.generateContent({
-        model: chosenModel,
-        contents: [
-          {
-            inlineData: {
-              mimeType: mimeType || "audio/mp3",
-              data: cleanBase64,
+      const generateOptions = {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            transcription: {
+              type: Type.STRING,
+              description: "Full transcript in original Kazakh Cyrillic script with strict specific letters.",
             },
-          },
-          {
-            text: prompt,
-          },
-        ],
-        config: {
-          systemInstruction,
-          temperature: 0.2,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              transcription: {
-                type: Type.STRING,
-                description: "Full transcript in original Kazakh Cyrillic script with strict specific letters.",
-              },
-              translation: {
-                type: Type.STRING,
-                description: "Fluent and accurate English translation.",
-              },
-              notes: {
-                type: Type.STRING,
-                description: "Linguistic observations, code-switching with Russian, speech clarity notes.",
-              },
-              segments: {
-                type: Type.ARRAY,
-                description: "Timed segments for subtitles.",
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    start_time: {
-                      type: Type.STRING,
-                      description: "SRT timestamp '00:00:00,000'",
-                    },
-                    end_time: {
-                      type: Type.STRING,
-                      description: "SRT timestamp '00:00:03,500'",
-                    },
-                    kazakh_text: {
-                      type: Type.STRING,
-                      description: "Kazakh speech in this interval",
-                    },
-                    english_text: {
-                      type: Type.STRING,
-                      description: "English translation in this interval",
-                    },
+            translation: {
+              type: Type.STRING,
+              description: "Fluent and accurate English translation.",
+            },
+            notes: {
+              type: Type.STRING,
+              description: "Linguistic observations, code-switching with Russian, speech clarity notes.",
+            },
+            segments: {
+              type: Type.ARRAY,
+              description: "Timed segments for subtitles.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  start_time: {
+                    type: Type.STRING,
+                    description: "SRT timestamp '00:00:00,000'",
                   },
-                  required: ["start_time", "end_time", "kazakh_text", "english_text"],
+                  end_time: {
+                    type: Type.STRING,
+                    description: "SRT timestamp '00:00:03,500'",
+                  },
+                  kazakh_text: {
+                    type: Type.STRING,
+                    description: "Kazakh speech in this interval",
+                  },
+                  english_text: {
+                    type: Type.STRING,
+                    description: "English translation in this interval",
+                  },
                 },
+                required: ["start_time", "end_time", "kazakh_text", "english_text"],
               },
             },
-            required: ["transcription", "translation", "notes"],
+          },
+          required: ["transcription", "translation", "notes"],
+        },
+      };
+
+      const contents = [
+        {
+          inlineData: {
+            mimeType: mimeType || "audio/mp3",
+            data: cleanBase64,
           },
         },
-      });
+        {
+          text: instructionsAndPrompt,
+        },
+      ];
+
+      let response;
+      let lastErr: any = null;
+      const modelToUse = "gemini-2.5-flash";
+
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          response = await ai.models.generateContent({
+            model: modelToUse,
+            contents,
+            config: generateOptions,
+          });
+          if (response?.text) {
+            break;
+          }
+        } catch (callErr: any) {
+          lastErr = callErr;
+          console.warn(`Tentative ${attempt}/3 (${callErr?.message || callErr})`);
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+          }
+        }
+      }
+
+      if (!response) {
+        throw lastErr || new Error("Échec de la génération avec l'API Gemini.");
+      }
 
       const responseText = response.text || "{}";
       const parsed = JSON.parse(responseText);

@@ -210,10 +210,10 @@ def transcribe_and_translate_kazakh_audio(
         )
         logger.info(f"Fichier téléversé avec succès sur Gemini : {gemini_file.name}")
 
-        # 3. Élaboration de la consigne système ultra-précise pour le Kazakh
-        system_instruction = (
+        # 3. Élaboration de la consigne linguistique ultra-précise pour le Kazakh
+        instructions_and_prompt = (
             "You are a native Kazakh senior linguist, professional speech-to-text expert, "
-            "and certified Kazakh-to-English translator.\n"
+            "and certified Kazakh-to-English translator.\n\n"
             "CRITICAL LINGUISTIC RULES FOR KAZAKH:\n"
             "1. Transcription MUST be in the official Kazakh Cyrillic script (Қазақ кириллицасы).\n"
             "2. Strictly preserve the 9 specific Kazakh letters: Әә, Ғғ, Ққ, Ңң, Өө, Ұұ, Үү, Һһ, Іі.\n"
@@ -223,10 +223,8 @@ def transcribe_and_translate_kazakh_audio(
             "5. Translate faithfully and idiomatically into natural, modern English.\n"
             "6. In the 'notes' field, document any code-switching (e.g. Russian loanwords), "
             "slang, dialect features, speech tempo, or unclear audio sections.\n"
-            "7. Segment the audio into timestamps if possible for subtitle synchronization."
-        )
-
-        user_prompt = (
+            "7. Segment the audio into timestamps if possible for subtitle synchronization.\n\n"
+            "TASK:\n"
             "Analyze this audio recording carefully.\n"
             "1. Transcribe the spoken Kazakh speech exactly in original Kazakh Cyrillic.\n"
             "2. Translate the entire text into fluent and accurate English.\n"
@@ -238,9 +236,8 @@ def transcribe_and_translate_kazakh_audio(
         logger.info(f"Génération du contenu avec le modèle {model_name}...")
         response = client.models.generate_content(
             model=model_name,
-            contents=[gemini_file, user_prompt],
+            contents=[gemini_file, instructions_and_prompt],
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
                 temperature=0.2,  # Température basse pour une transcription fidèle
                 response_mime_type="application/json",
                 response_schema=AudioAnalysisResponse,

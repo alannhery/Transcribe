@@ -131,8 +131,7 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
             className="text-xs border border-slate-200 bg-slate-50 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
           >
             <option value="gemini-2.5-flash">gemini-2.5-flash (Recommandé)</option>
-            <option value="gemini-3.8-flash">gemini-3.8-flash</option>
-            <option value="gemini-3.5-transcribe">gemini-3.5-transcribe</option>
+            <option value="gemini-3.5-flash">gemini-3.5-flash</option>
           </select>
         </div>
       </div>
