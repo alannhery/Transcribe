@@ -179,9 +179,13 @@ Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly i
           }
         } catch (callErr: any) {
           lastErr = callErr;
-          console.warn(`Tentative ${attempt}/3 (${callErr?.message || callErr})`);
+          const msg = callErr?.message || String(callErr);
+          console.warn(`Tentative ${attempt}/3 : ${msg}`);
           if (attempt < 3) {
-            await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+            // Délais progressifs plus longs (2.5s puis 5s) pour permettre au cluster de se désengorger
+            const isSpike = msg.includes("503") || msg.includes("high demand") || msg.includes("429");
+            const waitMs = isSpike ? 2500 * attempt : 1500 * attempt;
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
           }
         }
       }
@@ -199,9 +203,28 @@ Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly i
       });
     } catch (err: any) {
       console.error("Transcription error:", err);
+
+      const rawMsg = err?.message || String(err);
+      let friendlyError = "Une erreur est survenue lors de l'analyse avec Google Gemini.";
+      let isHighDemand = false;
+      let isQuota = false;
+
+      if (rawMsg.includes("503") || rawMsg.includes("high demand") || rawMsg.includes("UNAVAILABLE")) {
+        friendlyError = "Les serveurs Google Gemini connaissent actuellement un pic d'affluence temporaire (503 Service Unavailable). Veuillez patienter quelques secondes et cliquer sur 'Réessayer'.";
+        isHighDemand = true;
+      } else if (rawMsg.includes("429") || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("Quota exceeded")) {
+        friendlyError = "La limite temporaire de requêtes Google Gemini a été atteinte. Veuillez patienter une trentaine de secondes avant de relancer l'analyse.";
+        isQuota = true;
+      } else if (rawMsg.includes("API key not valid") || rawMsg.includes("403")) {
+        friendlyError = "Clé d'API Google Gemini invalide ou expirée.";
+      }
+
       res.status(500).json({
         success: false,
-        error: err.message || "Erreur lors du traitement avec l'API Gemini.",
+        error: friendlyError,
+        rawError: rawMsg,
+        isHighDemand,
+        isQuota,
       });
     }
   });

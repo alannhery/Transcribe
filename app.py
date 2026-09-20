@@ -232,17 +232,33 @@ def transcribe_and_translate_kazakh_audio(
             "4. Break down into timed segments suitable for .SRT subtitles."
         )
 
-        # 4. Inférence avec sortie structurée JSON (Pydantic / response_schema)
+        # 4. Inférence avec sortie structurée JSON (Pydantic / response_schema) et retry backoff
         logger.info(f"Génération du contenu avec le modèle {model_name}...")
-        response = client.models.generate_content(
-            model=model_name,
-            contents=[gemini_file, instructions_and_prompt],
-            config=types.GenerateContentConfig(
-                temperature=0.2,  # Température basse pour une transcription fidèle
-                response_mime_type="application/json",
-                response_schema=AudioAnalysisResponse,
-            )
-        )
+        response = None
+        for attempt in range(1, 4):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[gemini_file, instructions_and_prompt],
+                    config=types.GenerateContentConfig(
+                        temperature=0.2,  # Température basse pour une transcription fidèle
+                        response_mime_type="application/json",
+                        response_schema=AudioAnalysisResponse,
+                    )
+                )
+                if response and response.text:
+                    break
+            except Exception as call_err:
+                msg = str(call_err)
+                logger.warning(f"Tentative {attempt}/3 : {msg}")
+                if attempt < 3:
+                    wait_s = 3.0 * attempt if ("503" in msg or "429" in msg or "demand" in msg) else 1.5 * attempt
+                    time.sleep(wait_s)
+                else:
+                    raise
+
+        if not response:
+            raise ValueError("Échec de la génération de réponse depuis l'API Gemini.")
 
         # 5. Parsing et validation de la réponse JSON
         raw_json_text = response.text

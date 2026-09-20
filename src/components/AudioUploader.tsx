@@ -119,20 +119,13 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
           </p>
         </div>
 
-        {/* Choix du modèle */}
+        {/* Modèle Gemini utilisé */}
         <div className="flex items-center gap-2">
-          <label htmlFor="model-select" className="text-xs font-medium text-slate-600">
-            Modèle Gemini :
-          </label>
-          <select
-            id="model-select"
-            value={selectedModel}
-            onChange={(e) => onModelChange(e.target.value)}
-            className="text-xs border border-slate-200 bg-slate-50 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
-          >
-            <option value="gemini-2.5-flash">gemini-2.5-flash (Recommandé)</option>
-            <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-          </select>
+          <span className="text-xs font-medium text-slate-500">Moteur IA :</span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 border border-sky-200 text-sky-800 rounded-lg text-xs font-semibold shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+            Gemini 2.5 Flash (Audio & Cyrillique)
+          </span>
         </div>
       </div>
 

@@ -4,7 +4,8 @@ import { AudioUploader } from './components/AudioUploader';
 import { ResultsViewer } from './components/ResultsViewer';
 import { PythonModal } from './components/PythonModal';
 import { AudioAnalysisResult, SampleAudio } from './types';
-import { AlertCircle, FileCode, Terminal, Sparkles, BookOpen, Check } from 'lucide-react';
+import { SAMPLE_AUDIO_ITEMS } from './data/samples';
+import { AlertCircle, FileCode, Terminal, Sparkles, BookOpen, Check, RefreshCw } from 'lucide-react';
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -151,11 +152,50 @@ export default function App() {
 
         {/* Message d'erreur s'il y en a */}
         {errorMessage && (
-          <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-sm flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-semibold">Erreur d'analyse</p>
-              <p className="text-xs text-rose-700 mt-0.5">{errorMessage}</p>
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-900">Information d'analyse</p>
+                <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">{errorMessage}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <button
+                id="retry-analysis-btn"
+                onClick={() => handleStartAnalysis()}
+                disabled={isAnalyzing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                <span>Réessayer</span>
+              </button>
+              <button
+                id="load-sample-fallback-btn"
+                onClick={() => {
+                  const firstSample = SAMPLE_AUDIO_ITEMS[0];
+                  setActiveSample(firstSample);
+                  setSelectedFile(null);
+                  setErrorMessage(null);
+                  setAnalysisResult({
+                    transcription: firstSample.kazakhSampleText,
+                    translation: firstSample.englishTranslation,
+                    notes: firstSample.notes,
+                    segments: firstSample.segments,
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-lg text-xs font-medium transition-colors"
+              >
+                <span>Voir un exemple kazakh</span>
+              </button>
+              <button
+                id="dismiss-error-btn"
+                onClick={() => setErrorMessage(null)}
+                className="p-1 text-amber-600 hover:text-amber-800 rounded-md transition-colors"
+                title="Fermer"
+              >
+                ✕
+              </button>
             </div>
           </div>
         )}
