@@ -1,0 +1,6 @@
+{
+  "name": "Kazakh Audio Transcriber & Translator",
+  "description": "Transcription audio en kazakh (alphabet cyrillique) et traduction fidèle en anglais avec Google Gemini.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
