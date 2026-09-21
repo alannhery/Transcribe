@@ -220,12 +220,16 @@ export async function transcribeKazakhLocal(
   rawKazakh = rawKazakh.replace(/\[.*?\]/g, "").trim();
   rawEnglish = rawEnglish.replace(/\[.*?\]/g, "").trim();
 
-  // Si l'audio est trop court ou silencieux
-  if (!rawKazakh) {
-    rawKazakh = "Сәлеметсіз бе! Қазақстанға қош келдіңіз!";
+  // Suppression des boucles de répétition caractéristiques d'hallucination Whisper
+  rawKazakh = rawKazakh.replace(/(?:(?:\b|\s)(?:үм|üm|ум|um|ау|au|афлип|aflip)(?:\b|\s)){3,}/gi, " ").trim();
+  rawEnglish = rawEnglish.replace(/(?:Thank you for watching[!.?]*\s*){2,}/gi, "Thank you for watching.").trim();
+
+  // Si l'audio est silencieux ou non reconnu
+  if (!rawKazakh || rawKazakh.length < 2) {
+    rawKazakh = "Дыбыс жазбасы қабылданды (сөйлеу анық емес)";
   }
-  if (!rawEnglish) {
-    rawEnglish = "Hello! Welcome to Kazakhstan!";
+  if (!rawEnglish || rawEnglish === "Thank you for watching.") {
+    rawEnglish = "Audio recording processed (unclear or low-volume speech).";
   }
 
   const kazakhText = refineKazakhCyrillic(rawKazakh);

@@ -78,3 +78,52 @@ export function downloadTextFile(filename: string, content: string, mimeType = '
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+export function generateSampleWavBlob(durationSeconds = 3): Blob {
+  const sampleRate = 16000;
+  const numSamples = sampleRate * durationSeconds;
+  const dataByteLength = numSamples * 2;
+  const totalByteLength = 44 + dataByteLength;
+
+  const buffer = new ArrayBuffer(totalByteLength);
+  const view = new DataView(buffer);
+
+  // RIFF chunk
+  view.setUint32(0, 0x52494646, false); // 'RIFF'
+  view.setUint32(4, 36 + dataByteLength, true);
+  view.setUint32(8, 0x57415645, false); // 'WAVE'
+
+  // 'fmt ' chunk
+  view.setUint32(12, 0x666d7420, false);
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+
+  // 'data' chunk
+  view.setUint32(36, 0x64617461, false);
+  view.setUint32(40, dataByteLength, true);
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const f0 = 150 + 10 * Math.sin(2 * Math.PI * 1.5 * t);
+    const wave =
+      0.6 * Math.sin(2 * Math.PI * f0 * t) +
+      0.3 * Math.sin(2 * Math.PI * f0 * 2 * t) +
+      0.15 * Math.sin(2 * Math.PI * f0 * 3 * t);
+    const cadence = Math.sin(2 * Math.PI * 2.2 * t);
+    const env = Math.max(0, cadence);
+    const sampleVal = Math.max(-32768, Math.min(32767, Math.round(wave * env * 10000)));
+    view.setInt16(44 + i * 2, sampleVal, true);
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+export function generateSampleWavBlobUrl(durationSeconds = 3): string {
+  const blob = generateSampleWavBlob(durationSeconds);
+  return URL.createObjectURL(blob);
+}

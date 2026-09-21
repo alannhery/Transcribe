@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Upload, Mic, Square, FileAudio, Play, Pause, Sparkles, Volume2, Music, Cpu, Cloud, ShieldCheck } from 'lucide-react';
 import { SAMPLE_AUDIO_ITEMS } from '../data/samples';
 import { SampleAudio, EngineMode } from '../types';
+import { generateSampleWavBlob } from '../utils/audioUtils';
 
 interface AudioUploaderProps {
   onAudioSelected: (file: File | null, audioUrl: string | null, sample?: SampleAudio) => void;
@@ -106,8 +107,10 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
   };
 
   const selectSample = (sample: SampleAudio) => {
-    // Crée un blob audio synthétique avec oscillateur ou simple fichier audio
-    onAudioSelected(null, null, sample);
+    const blob = generateSampleWavBlob(4);
+    const audioFile = new File([blob], `${sample.id}_sample.wav`, { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    onAudioSelected(audioFile, url, sample);
   };
 
   return (
@@ -128,23 +131,6 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
           <span className="text-xs font-medium text-slate-500">Moteur d'inférence :</span>
           <div className="inline-flex p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs">
             <button
-              id="engine-local-btn"
-              type="button"
-              onClick={() => onEngineModeChange('local-whisper')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${
-                engineMode === 'local-whisper'
-                  ? 'bg-white text-emerald-800 shadow-2xs font-semibold border border-emerald-200'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Cpu className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Modèle Local (Whisper ONNX)</span>
-              <span className="text-[10px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-semibold">
-                Sans API
-              </span>
-            </button>
-
-            <button
               id="engine-cloud-btn"
               type="button"
               onClick={() => onEngineModeChange('gemini-cloud')}
@@ -156,6 +142,26 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
             >
               <Cloud className="w-3.5 h-3.5 text-sky-600" />
               <span>Google Gemini (Cloud)</span>
+              <span className="text-[10px] px-1.5 py-0.2 bg-sky-100 text-sky-800 rounded font-semibold">
+                Recommandé
+              </span>
+            </button>
+
+            <button
+              id="engine-local-btn"
+              type="button"
+              onClick={() => onEngineModeChange('local-whisper')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${
+                engineMode === 'local-whisper'
+                  ? 'bg-white text-emerald-800 shadow-2xs font-semibold border border-emerald-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Modèle Local (Whisper)</span>
+              <span className="text-[10px] px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded font-normal">
+                Hors-ligne
+              </span>
             </button>
           </div>
         </div>

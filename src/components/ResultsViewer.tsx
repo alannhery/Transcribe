@@ -112,7 +112,13 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ result, filename }
           </div>
 
           <div className="flex-1 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap font-sans bg-white p-4 rounded-lg border border-sky-100/80 shadow-2xs">
-            {result.transcription}
+            {result.transcription?.trim() ? (
+              result.transcription
+            ) : (
+              <span className="text-slate-400 italic">
+                Aucun signal vocal kazakh distinct n'a été détecté dans cet enregistrement (vérifiez le microphone ou le niveau sonore).
+              </span>
+            )}
           </div>
 
           {/* Validation des 9 lettres spécifiques kazakhes */}
@@ -166,7 +172,13 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({ result, filename }
           </div>
 
           <div className="flex-1 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap font-sans bg-white p-4 rounded-lg border border-emerald-100/80 shadow-2xs">
-            {result.translation}
+            {result.translation?.trim() ? (
+              result.translation
+            ) : (
+              <span className="text-slate-400 italic">
+                Aucune parole à traduire dans cet enregistrement.
+              </span>
+            )}
           </div>
 
           <div className="mt-4 pt-3 border-t border-emerald-100 flex items-center justify-between text-xs text-slate-500">

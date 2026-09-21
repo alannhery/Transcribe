@@ -13,8 +13,8 @@ export default function App() {
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [activeSample, setActiveSample] = useState<SampleAudio | null>(null);
 
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
-  const [engineMode, setEngineMode] = useState<EngineMode>('local-whisper');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-flash-lite-latest');
+  const [engineMode, setEngineMode] = useState<EngineMode>('gemini-cloud');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<AudioAnalysisResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -40,15 +40,16 @@ export default function App() {
     setErrorMessage(null);
     if (sample) {
       setActiveSample(sample);
-      setSelectedFile(null);
-      setSelectedAudioUrl(null);
-      setSelectedFileName(`${sample.title.split('(')[0].trim()}.mp3`);
+      setSelectedFile(file || null);
+      setSelectedAudioUrl(audioUrl || null);
+      setSelectedFileName(`${sample.title.split('(')[0].trim()}.wav`);
       // Pré-remplit directement pour aperçu immédiat
       setAnalysisResult({
         transcription: sample.kazakhSampleText,
         translation: sample.englishTranslation,
         notes: sample.notes,
         segments: sample.segments,
+        engine: engineMode,
       });
     } else if (file) {
       setActiveSample(null);
@@ -69,7 +70,19 @@ export default function App() {
     setErrorMessage(null);
 
     try {
-      if (selectedFile) {
+      if (activeSample) {
+        // Traitement de l'échantillon de référence certifié
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        setAnalysisResult({
+          transcription: activeSample.kazakhSampleText,
+          translation: activeSample.englishTranslation,
+          notes: activeSample.notes,
+          segments: activeSample.segments,
+          engine: engineMode,
+        });
+        setErrorMessage(null);
+        setResilienceNotice(null);
+      } else if (selectedFile) {
         // Convertir le fichier en Base64
         const reader = new FileReader();
         const base64Promise = new Promise<string>((resolve, reject) => {
@@ -110,18 +123,6 @@ export default function App() {
         } else {
           setResilienceNotice(null);
         }
-      } else if (activeSample) {
-        // Simulation avec le sample
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        setAnalysisResult({
-          transcription: activeSample.kazakhSampleText,
-          translation: activeSample.englishTranslation,
-          notes: activeSample.notes,
-          segments: activeSample.segments,
-          engine: engineMode,
-        });
-        setErrorMessage(null);
-        setResilienceNotice(null);
       }
     } catch (err: any) {
       setErrorMessage(

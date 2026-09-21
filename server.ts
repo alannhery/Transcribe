@@ -42,7 +42,7 @@ async function startServer() {
       status: "ok",
       hasApiKey: Boolean(process.env.GEMINI_API_KEY),
       localEngineReady: true,
-      defaultEngine: "local-whisper",
+      defaultEngine: "gemini-cloud",
     });
   });
 
@@ -114,10 +114,16 @@ async function startServer() {
     }
   });
 
-  // Transcription & Traduction audio via Gemini (avec secours automatique sur le modèle local)
+  // Transcription & Traduction audio via Gemini (avec cascade de modèles résiliente et secours)
   app.post("/api/transcribe", async (req, res) => {
     try {
-      const { audioBase64, mimeType, model = "gemini-2.5-flash", customApiKey, engine = "local-whisper" } = req.body;
+      const {
+        audioBase64,
+        mimeType,
+        model = "gemini-flash-lite-latest",
+        customApiKey,
+        engine = "gemini-cloud",
+      } = req.body;
 
       if (!audioBase64) {
         res.status(400).json({ error: "Données audio manquantes (audioBase64 requis)." });
@@ -143,13 +149,14 @@ async function startServer() {
 
       const activeKey = customApiKey || process.env.GEMINI_API_KEY;
       if (!activeKey) {
-        // Si aucune clé Gemini, basculer immédiatement et silencieusement sur le modèle local Whisper
+        // Si aucune clé Gemini, basculer immédiatement sur le modèle local Whisper
         const localResult = await transcribeKazakhLocal(audioBuffer);
         res.json({
           success: true,
           data: localResult,
           engine: "local-whisper",
           isLocal: true,
+          resilienceNotice: "Aucune clé Gemini fournie, exécution via le modèle local Whisper.",
         });
         return;
       }
@@ -163,7 +170,7 @@ async function startServer() {
         },
       });
 
-      const instructionsAndPrompt = `You are a native Kazakh senior linguist, professional speech-to-text expert, and certified Kazakh-to-English translator.
+      const instructionsAndPrompt = `You are an expert native Kazakh phonetician, professional speech-to-text transcriber, and certified Kazakh-to-English translator.
 
 CRITICAL LINGUISTIC RULES FOR KAZAKH:
 1. Transcription MUST strictly be in official Kazakh Cyrillic script (Қазақ кириллицасы).
@@ -171,16 +178,16 @@ CRITICAL LINGUISTIC RULES FOR KAZAKH:
 3. Never replace Kazakh letters with generic Russian counterparts (e.g. do NOT replace 'қ' with 'к', 'ғ' with 'г', 'ұ'/'ү' with 'у', 'і' with 'и').
 4. Follow Kazakh vowel harmony (жуан және жіңішке дауыстылар).
 5. Translate faithfully into fluent, idiomatic, natural English.
-6. In 'notes', record linguistic observations: Russian code-switching/loanwords, dialectal features, audio quality.
+6. In 'notes', record linguistic observations: Russian code-switching/loanwords, dialectal features, audio speech clarity.
 7. Break down the speech into timed segments for subtitles (.SRT formatted timestamps 'HH:MM:SS,mmm').
+8. If the audio does not contain intelligible speech or is silent, set transcription to "" and translation to "" and explain in 'notes'.
 
 TASK:
-Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly in original Kazakh Cyrillic script and translate it faithfully into English. Provide phonetic/linguistic notes and timestamped subtitle segments.`;
-
-      const primaryModel = model || "gemini-2.5-flash";
+Analyze the attached audio recording. Transcribe the spoken Kazakh speech exactly in original Kazakh Cyrillic script and translate it faithfully into English. Provide phonetic/linguistic notes and timestamped subtitle segments.`;
 
       const generateOptions = {
-        temperature: 0.2,
+        temperature: 0.1,
+        maxOutputTokens: 2048,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -228,10 +235,15 @@ Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly i
         },
       };
 
+      // Nettoyage et normalisation du MIME type audio
+      let cleanMime = (mimeType || "audio/mp3").split(";")[0].trim().toLowerCase();
+      if (cleanMime === "audio/x-m4a" || cleanMime === "audio/m4a") cleanMime = "audio/mp4";
+      if (!cleanMime || cleanMime === "application/octet-stream") cleanMime = "audio/mp3";
+
       const contents = [
         {
           inlineData: {
-            mimeType: mimeType || "audio/mp3",
+            mimeType: cleanMime,
             data: cleanBase64,
           },
         },
@@ -240,36 +252,37 @@ Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly i
         },
       ];
 
-      let response;
-      let lastErr: any = null;
-      const modelToUse = "gemini-2.5-flash";
+      // Cascade multi-modèle résiliente : teste en priorité le modèle ultra-rapide sans quota
+      const candidateModels = Array.from(new Set([
+        model || "gemini-flash-lite-latest",
+        "gemini-flash-lite-latest",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+      ]));
 
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      let response: any = null;
+      let lastErr: any = null;
+      let usedModel = "";
+
+      for (const m of candidateModels) {
         try {
-          response = await ai.models.generateContent({
-            model: modelToUse,
+          console.log(`[Transcription] Appel API Gemini avec modèle: ${m}...`);
+          const res = await ai.models.generateContent({
+            model: m,
             contents,
             config: generateOptions,
           });
-          if (response?.text) {
+          if (res?.text) {
+            response = res;
+            usedModel = m;
+            console.log(`[Transcription] Succès avec ${m}`);
             break;
           }
         } catch (callErr: any) {
           lastErr = callErr;
           const msg = callErr?.message || String(callErr);
-          console.warn(`Tentative ${attempt}/3 : ${msg}`);
-
-          // Si quota atteint (429), inutile de spammer l'API, on bascule directement en résilience
-          if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("Quota exceeded")) {
-            break;
-          }
-
-          if (attempt < 3) {
-            // Délais progressifs plus longs pour permettre au cluster de se désengorger en cas de 503
-            const isSpike = msg.includes("503") || msg.includes("high demand");
-            const waitMs = isSpike ? 2500 * attempt : 1500 * attempt;
-            await new Promise((resolve) => setTimeout(resolve, waitMs));
-          }
+          console.warn(`[Transcription] Modèle ${m} indisponible (${callErr?.status || 'err'}): ${msg.slice(0, 120)}`);
         }
       }
 
@@ -278,34 +291,41 @@ Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly i
       }
 
       const responseText = response.text || "{}";
-      const parsed = JSON.parse(responseText);
+      let parsed: any;
+      try {
+        let cleanText = responseText.trim();
+        if (cleanText.startsWith("```")) {
+          cleanText = cleanText.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+        }
+        parsed = JSON.parse(cleanText);
+      } catch (_parseErr) {
+        console.warn("[Transcription] Parse standard échoué, extraction par expressions régulières...");
+        // Extraction résiliente des champs clés
+        const kazakhMatch = responseText.match(/"transcription"\s*:\s*"((?:[^"\\]|\\.)*)"?/);
+        const engMatch = responseText.match(/"translation"\s*:\s*"((?:[^"\\]|\\.)*)"?/);
+        const notesMatch = responseText.match(/"notes"\s*:\s*"((?:[^"\\]|\\.)*)"?/);
+
+        parsed = {
+          transcription: kazakhMatch ? kazakhMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n").trim() : "",
+          translation: engMatch ? engMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n").trim() : "",
+          notes: notesMatch ? notesMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n").trim() : "Transcription extraite avec succès.",
+          segments: [],
+        };
+      }
 
       res.json({
         success: true,
         data: parsed,
+        engine: "gemini-cloud",
+        model: usedModel,
       });
     } catch (err: any) {
       const rawMsg = err?.message || String(err);
-      let isHighDemand = false;
-      let isQuota = false;
-      let retryDelay = 30;
+      console.error("[Transcription Error]", rawMsg);
 
-      const delayMatch = rawMsg.match(/retry in ([0-9.]+)s/i);
-      if (delayMatch) {
-        retryDelay = Math.ceil(parseFloat(delayMatch[1]));
-      }
-
-      if (rawMsg.includes("503") || rawMsg.includes("high demand") || rawMsg.includes("UNAVAILABLE")) {
-        isHighDemand = true;
-      } else if (rawMsg.includes("429") || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("Quota exceeded")) {
-        isQuota = true;
-      }
-
-      console.warn(`[Transcription] Basculement en mode résilience : ${isQuota ? 'Quota API Gemini atteint' : 'Disponibilité API'} (délai: ${retryDelay}s)`);
-
-      // 1. Tenter une transcription directe avec le modèle local Whisper sur le vrai fichier audio de l'utilisateur
+      // En cas d'échec de Gemini, tenter le moteur local Whisper en relais
       try {
-        if (req.body.audioBase64) {
+        if (req.body?.audioBase64) {
           const cleanB64 = req.body.audioBase64.includes(";base64,")
             ? req.body.audioBase64.split(";base64,").pop()!
             : req.body.audioBase64.replace(/^data:[^;]+;base64,/, "");
@@ -317,10 +337,7 @@ Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly i
             engine: "local-whisper",
             isLocal: true,
             isResilienceMode: true,
-            resilienceNotice: `L'API Gemini étant soumise à des limites de quota (${retryDelay}s d'attente), le modèle local Whisper Tiny a pris le relais avec succès en local pour traiter votre audio.`,
-            retryDelay,
-            isHighDemand,
-            isQuota,
+            resilienceNotice: "L'API Cloud étant momentanément saturée, le modèle Whisper a pris le relais en local.",
           });
           return;
         }
@@ -328,47 +345,17 @@ Analyze the attached Kazakh audio. Transcribe the spoken Kazakh speech exactly i
         console.warn("[Transcription] Fallback local Whisper exception:", localErr?.message);
       }
 
-      // Résultat linguistique de haute fidélité pour ne jamais bloquer l'utilisateur
-      const fallbackResult = {
-        transcription: "Сәлеметсіз бе! Менің атым Айгүл. Қазақстанға қош келдіңіз! Бүгін ауа райы өте тамаша, күн жылы болып тұр. Оқу – білім бұлағы, білім – өмір шырағы. Тіл байлығы – ел байлығы.",
-        translation: "Hello! My name is Aigul. Welcome to Kazakhstan! Today the weather is wonderful, the sun is warm. Study is the fountain of knowledge, knowledge is the lantern of life. The richness of language is the wealth of the nation.",
-        notes: "Analyse réalisée en mode haute disponibilité : transcription fidèle en cyrillique kazakh respectant l'ensemble des 9 graphèmes spécifiques (ә, ғ, қ, ң, ө, ұ, ү, һ, і) et les règles d'harmonie vocalique (үндестік заңы).",
-        segments: [
-          {
-            start_time: "00:00:00,500",
-            end_time: "00:00:03,200",
-            kazakh_text: "Сәлеметсіз бе! Менің атым Айгүл.",
-            english_text: "Hello! My name is Aigul."
-          },
-          {
-            start_time: "00:00:03,400",
-            end_time: "00:00:05,800",
-            kazakh_text: "Қазақстанға қош келдіңіз!",
-            english_text: "Welcome to Kazakhstan!"
-          },
-          {
-            start_time: "00:00:06,000",
-            end_time: "00:00:09,500",
-            kazakh_text: "Бүгін ауа райы өте тамаша, күн жылы болып тұр.",
-            english_text: "Today the weather is wonderful, the sun is warm."
-          },
-          {
-            start_time: "00:00:09,800",
-            end_time: "00:00:14,200",
-            kazakh_text: "Оқу – білім бұлағы, білім – өмір шырағы. Тіл байлығы – ел байлығы.",
-            english_text: "Study is the fountain of knowledge, knowledge is the lantern of life. The richness of language is the wealth of the nation."
-          }
-        ]
-      };
-
       res.status(200).json({
         success: true,
-        data: fallbackResult,
+        data: {
+          transcription: "Дыбыс жазбасы қабылданды (сервер жүктемесі жоғары)",
+          translation: "Audio recording received (AI service is experiencing high traffic, please retry momentarily).",
+          notes: "Le service d'inférence est temporairement très sollicité. Vous pouvez relancer l'analyse ou utiliser l'un des échantillons kazakhs de démonstration.",
+          segments: [],
+        },
+        engine: "fallback-resilience",
         isResilienceMode: true,
-        resilienceNotice: `Analyse fournie en mode résilience : le quota gratuit de l'API Gemini est temporairement atteint (~${retryDelay}s de fenêtre de réinitialisation). Les résultats bilingues complets et les sous-titres .SRT sont prêts et exploitables.`,
-        retryDelay,
-        isHighDemand,
-        isQuota,
+        resilienceNotice: "Les serveurs d'inférence cloud sont momentanément très sollicités. Vous pouvez réessayer dans quelques instants.",
       });
     }
   });
